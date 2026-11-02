@@ -39,7 +39,8 @@ input{width:100%;padding:10px;border-radius:4px;border:0;background:var(--bg3);o
 .ch:hover{background:var(--hv)}.ch.on{background:var(--hv);color:var(--tx)}
 .cat{font-size:12px;font-weight:700;color:var(--mu);margin:12px 6px 4px;text-transform:uppercase}
 .me{display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg3)}
-.av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;flex:none}
+.av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;flex:none;transition:box-shadow .15s}
+.talk{box-shadow:0 0 0 3px #f5c518,0 0 14px 2px #f5c518aa}.tile.talk{box-shadow:none;outline:3px solid #f5c518;outline-offset:-3px}
 .me span{flex:1;overflow:hidden;text-overflow:ellipsis}#mav{cursor:pointer}
 .ib{background:none;color:var(--mu);padding:6px;border-radius:4px}.ib:hover{background:var(--hv)}
 #main{background:var(--bg)}
@@ -137,7 +138,7 @@ function render(){
  $("msgs").style.display=v?"none":"block";$("inp").style.display=v?"none":"flex";$("voice").style.display=v?"flex":"none";
  $("chs").classList.remove("show");
  if(!v)drawMsgs();
- const us=Object.values(S.get("cc_users",{}));$("ml").innerHTML=`<div class="mm"><div class="av" style="${avs("Claude")}">${avl("Claude")}</div>Claude <small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px">BOT</small><span class="dot"></span></div>`+us.map(u=>`<div class="mm"><div class="av" style="${avs(u.name)}">${avl(u.name)}</div>${esc(u.name)}<span class="dot"></span></div>`).join("");
+ const us=Object.values(S.get("cc_users",{}));$("ml").innerHTML=`<div class="mm"><div class="av" data-ai="1" style="${avs("Claude")}">${avl("Claude")}</div>Claude <small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px">BOT</small><span class="dot"></span></div>`+us.map(u=>`<div class="mm"><div class="av"${u.name.toLowerCase()==me.toLowerCase()?' data-me="1"':''} style="${avs(u.name)}">${avl(u.name)}</div>${esc(u.name)}<span class="dot"></span></div>`).join("");paintTalk();
 }
 const esc=t=>String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function drawMsgs(){const id=srvs[cur.s].ch[cur.c].id,l=msgs[id]||[];
@@ -145,6 +146,17 @@ function drawMsgs(){const id=srvs[cur.s].ch[cur.c].id,l=msgs[id]||[];
  if(typing==id)$("msgs").insertAdjacentHTML("beforeend",'<p style="color:var(--mu)">Claude está digitando…</p>');$("msgs").scrollTop=1e9}
 $("mi").onkeydown=e=>{if(e.key!="Enter")return;const t=$("mi").value.trim().slice(0,2000);if(!t)return;if(!rate())return;const id=srvs[cur.s].ch[cur.c].id;(msgs[id]=msgs[id]||[]).push({u:me,t,ts:Date.now()});S.set("cc_msgs",msgs);$("mi").value="";drawMsgs();const ch=srvs[cur.s].ch[cur.c];if(ch.ai||/@claude/i.test(t))askClaude(id)};
 let typing=null;
+let talking=false,actx=null;
+function paintTalk(){$("mav").classList.toggle("talk",talking);document.querySelectorAll(".tile").forEach(t=>t.classList.toggle("talk",talking));document.querySelectorAll("[data-me]").forEach(e=>e.classList.toggle("talk",talking));document.querySelectorAll("[data-ai]").forEach(e=>e.classList.toggle("talk",typing!==null))}
+function setTalk(v){if(v!==talking){talking=v;paintTalk()}}
+function watchMic(st){try{
+ if(actx)actx.close();actx=new (window.AudioContext||window.webkitAudioContext)();actx.resume();
+ const an=actx.createAnalyser();an.fftSize=512;actx.createMediaStreamSource(st).connect(an);
+ const buf=new Uint8Array(an.fftSize);let last=0;
+ const tick=()=>{if(!media.mic||!actx){setTalk(false);if(actx){actx.close();actx=null}return}
+  an.getByteTimeDomainData(buf);let s=0;for(const v of buf){const d=(v-128)/128;s+=d*d}
+  if(Math.sqrt(s/buf.length)>0.04)last=Date.now();setTalk(Date.now()-last<400);requestAnimationFrame(tick)};
+ tick()}catch(e){}}
 const okImg=s=>typeof s=="string"&&s.length<3e6&&/^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/.test(s);
 function pwWeak(p,u){if(p.length<10)return "A senha precisa de pelo menos 10 caracteres.";if(!/[a-zA-Z]/.test(p)||!/\d/.test(p))return "Use letras e números na senha.";if(/^(.)\1+$/.test(p)||/(password|senha|qwerty|123456|abcdef|admin|letmein)/i.test(p))return "Essa senha é muito comum. Escolha outra.";if(p.toLowerCase().includes(u.toLowerCase()))return "A senha não pode conter o nome de usuário.";return ""}
 const hx=a=>[...new Uint8Array(a)].map(x=>x.toString(16).padStart(2,"0")).join("");
@@ -183,7 +195,7 @@ $("att").onclick=()=>$("fi").click();
 $("fi").onchange=()=>{sendImg($("fi").files[0]);$("fi").value=""};
 $("mi").onpaste=e=>{const f=[...(e.clipboardData?e.clipboardData.files:[])][0];if(f&&f.type.startsWith("image/")){e.preventDefault();sendImg(f)}};
 async function askClaude(id){
- typing=id;drawMsgs();let out;
+ typing=id;paintTalk();drawMsgs();let out;
  try{
   const sample=await claude.use("sample");
   if(!sample)throw {code:"none"};
@@ -195,7 +207,7 @@ async function askClaude(id){
   arr[0].content="Você é o Claude, um assistente de IA dentro do Concord, um chat estilo Discord. Responda em português, de forma curta e amigável, sem markdown pesado. Cada mensagem de usuário começa com o nome de quem escreveu. Você pode receber imagens anexadas (as mais recentes do chat, em ordem); analise-as quando perguntarem.\n\n"+arr[0].content;
   out=(await sample(arr,imgs.length?{cache:false,images:imgs}:{cache:false})).text;
  }catch(e){out=e&&e.code=="not_granted"?"Preciso da sua permissão para responder. Envie outra mensagem e aceite o pedido.":e&&e.code=="rate_limited"?"Muitas mensagens seguidas, tente de novo em instantes.":"Não consegui responder agora. O Claude só funciona na página publicada no claude.ai."}
- typing=null;(msgs[id]=msgs[id]||[]).push({u:"Claude",t:out||"…",ts:Date.now()});S.set("cc_msgs",msgs);if(srvs[cur.s].ch[cur.c].id==id)drawMsgs()}
+ typing=null;paintTalk();(msgs[id]=msgs[id]||[]).push({u:"Claude",t:out||"…",ts:Date.now()});S.set("cc_msgs",msgs);if(srvs[cur.s].ch[cur.c].id==id)drawMsgs()}
 $("addch").onclick=()=>{const n=(prompt("Nome do canal")||"").trim();if(!n)return;const v=confirm("Canal de voz? OK = voz, Cancelar = texto");srvs[cur.s].ch.push({id:"c"+Date.now(),n,t:v?"voice":"text"});S.set("cc_servers",srvs);render()};
 $("menu").onclick=()=>$("chs").classList.toggle("show");
 window.addEventListener("storage",e=>{if(!me)return;if(e.key=="cc_msgs"){msgs=S.get("cc_msgs",{});if(srvs[cur.s].ch[cur.c].t=="text")drawMsgs()}if(e.key=="cc_users"){loadPics();paintMe();render()}});
@@ -204,16 +216,16 @@ window.addEventListener("storage",e=>{if(!me)return;if(e.key=="cc_msgs"){msgs=S.
 function tiles(){const g=$("grid");g.innerHTML="";
  [["cam","Câmera"],["scr","Tela"]].forEach(([k,l])=>{if(!media[k])return;const t=document.createElement("div");t.className="tile";const v=document.createElement("video");v.autoplay=true;v.muted=true;v.playsInline=true;v.srcObject=media[k];t.appendChild(v);const tg=document.createElement("div");tg.className="tag";tg.textContent="🔴 "+me+" · "+l;t.appendChild(tg);g.appendChild(t)});
  if(!g.children.length){const t=document.createElement("div");t.className="tile";t.innerHTML=`<div class="av" style="width:80px;height:80px;font-size:32px;${avs(me)}">${avl(me)}</div>`;g.appendChild(t)}
- $("bCam").className="cb"+(media.cam?" on":"");$("bScr").className="cb"+(media.scr?" on":"");$("bMic").className="cb"+(media.mic?" on":"")}
+ $("bCam").className="cb"+(media.cam?" on":"");$("bScr").className="cb"+(media.scr?" on":"");$("bMic").className="cb"+(media.mic?" on":"");paintTalk()}
 async function toggle(k){
  if(media[k]){media[k].getTracks().forEach(t=>t.stop());media[k]=null;return tiles()}
  try{
   media[k]=k=="scr"?await navigator.mediaDevices.getDisplayMedia({video:true,audio:true}):await navigator.mediaDevices.getUserMedia(k=="cam"?{video:true}:{audio:true});
-  media[k].getVideoTracks().forEach(t=>t.onended=()=>{media[k]=null;tiles()});
+  media[k].getVideoTracks().forEach(t=>t.onended=()=>{media[k]=null;tiles()});if(k=="mic")watchMic(media[k]);
  }catch(e){$("note").textContent="Não foi possível acessar: permita o acesso no navegador ("+(e.name||"erro")+").";media[k]=null}
  tiles()}
 $("bCam").onclick=()=>toggle("cam");$("bScr").onclick=()=>toggle("scr");$("bMic").onclick=()=>toggle("mic");
-function leave(){["cam","scr","mic"].forEach(k=>{if(media[k]){media[k].getTracks().forEach(t=>t.stop());media[k]=null}});inCall=false;tiles()}
+function leave(){["cam","scr","mic"].forEach(k=>{if(media[k]){media[k].getTracks().forEach(t=>t.stop());media[k]=null}});inCall=false;talking=false;tiles()}
 $("bLeave").onclick=()=>{leave();cur.c=srvs[cur.s].ch.findIndex(c=>c.t=="text");render()};
 new MutationObserver(()=>{});
 const vo=$("voice");let lastV=false;
