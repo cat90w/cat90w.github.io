@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Concord</title>
 <meta name="referrer" content="no-referrer">
-<script>if(location.hostname.endsWith(".github.io")){var m=document.createElement("meta");m.httpEquiv="Content-Security-Policy";m.content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none'";document.head.appendChild(m);if(top!==self)top.location=self.location}</script>
+<script>var API="";if(location.hostname.endsWith(".github.io")){var m=document.createElement("meta");m.httpEquiv="Content-Security-Policy";m.content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; connect-src "+(API?new URL(API).origin:"'none'")+"; base-uri 'none'; form-action 'none'";document.head.appendChild(m);if(top!==self)top.location=self.location}</script>
 <style>
 :root{--bg:#313338;--bg2:#2b2d31;--bg3:#1e1f22;--tx:#dbdee1;--mu:#949ba4;--ac:#5865f2;--ok:#23a55a;--er:#f23f43;--hv:#3f4147;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:dark}
@@ -78,7 +78,7 @@ input{width:100%;padding:10px;border-radius:4px;border:0;background:var(--bg3);o
 <div id="app">
 <div class="col" id="srv"></div>
 <div class="col" id="chs"><div class="hd"><span id="sn"></span><button class="ib" id="addch" title="Novo canal">＋</button></div><div class="list" id="chl"></div>
-<div class="me"><div class="av" id="mav" title="Trocar foto de perfil"></div><input type="file" id="pf" accept="image/*" hidden><span id="mn"></span><button class="ib" id="out" title="Sair">⎋</button></div></div>
+<div class="me"><div class="av" id="mav" title="Trocar foto de perfil"></div><input type="file" id="pf" accept="image/*" hidden><span id="mn"></span><button class="ib" id="bot" title="Meus bots e chaves">🤖</button><button class="ib" id="out" title="Sair">⎋</button></div></div>
 <div class="col" id="main">
 <div class="hd"><span><button class="ib" id="menu">☰</button> <span id="cn"></span></span></div>
 <div id="msgs"></div>
@@ -90,6 +90,7 @@ input{width:100%;padding:10px;border-radius:4px;border:0;background:var(--bg3);o
 <div class="col" id="mem"><div class="hd">Membros</div><div class="list" id="ml"></div></div>
 </div>
 
+<div id="bm" style="display:none;position:fixed;inset:0;background:#000a;z-index:30;align-items:center;justify-content:center;padding:16px"><div class="card" style="max-width:460px;max-height:90vh;overflow:auto"><h1 style="font-size:20px">🤖 Meus bots e chaves</h1><p>Crie bots do Concord e gere a chave de cada um.</p><div id="bl"></div><label>Nome do bot</label><input id="bn" maxlength="20"><label>Personalidade (opcional, ativa a IA)</label><input id="bp" maxlength="300" placeholder="Ex.: pirata engraçado que responde em rimas"><div class="err" id="be"></div><button class="btn" id="bc">Criar bot e gerar chave</button><button class="btn" id="bx" style="background:var(--bg2);color:var(--tx)">Fechar</button></div></div>
 <script>
 const $=id=>document.getElementById(id);
 const S={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
@@ -108,7 +109,7 @@ async function submit(){
  if(!window.crypto||!crypto.subtle)return $("err").textContent="Este navegador não suporta criptografia segura.";const lk=S.get("cc_lock",{}),L=lk[k]||{n:0,t:0};if(mode=="in"&&L.t>Date.now())return $("err").textContent="Muitas tentativas. Aguarde "+Math.ceil((L.t-Date.now())/1000)+"s.";
  if(mode=="up"){
   if(p!==$("p2").value)return $("err").textContent="As senhas não coincidem.";
-  if(Object.prototype.hasOwnProperty.call(users,k))return $("err").textContent="Esse nome já está em uso.";
+  if(Object.prototype.hasOwnProperty.call(users,k)||getBots().some(b=>b.name.toLowerCase()==k))return $("err").textContent="Esse nome já está em uso.";
   const salt=rnd(16);users[k]={name:u,s:salt,h:await pbk(p,salt),v:2};if(!S.set("cc_users",users))return $("err").textContent="Não foi possível salvar a conta (armazenamento cheio).";
  }else{
   const o=Object.prototype.hasOwnProperty.call(users,k)?users[k]:null;let ok=false;
@@ -138,14 +139,37 @@ function render(){
  $("msgs").style.display=v?"none":"block";$("inp").style.display=v?"none":"flex";$("voice").style.display=v?"flex":"none";
  $("chs").classList.remove("show");
  if(!v)drawMsgs();
- const us=Object.values(S.get("cc_users",{}));$("ml").innerHTML=`<div class="mm"><div class="av" data-ai="1" style="${avs("Claude")}">${avl("Claude")}</div>Claude <small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px">BOT</small><span class="dot"></span></div>`+us.map(u=>`<div class="mm"><div class="av"${u.name.toLowerCase()==me.toLowerCase()?' data-me="1"':''} style="${avs(u.name)}">${avl(u.name)}</div>${esc(u.name)}<span class="dot"></span></div>`).join("");paintTalk();
+ const us=Object.values(S.get("cc_users",{}));$("ml").innerHTML=`<div class="mm"><div class="av" data-ai="1" style="${avs("Claude")}">${avl("Claude")}</div>Claude <small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px">BOT</small><span class="dot"></span></div>`+us.map(u=>`<div class="mm"><div class="av"${u.name.toLowerCase()==me.toLowerCase()?' data-me="1"':''} style="${avs(u.name)}">${avl(u.name)}</div>${esc(u.name)}<span class="dot"></span></div>`).join("")+getBots().map(b=>`<div class="mm"><div class="av" style="${avs(b.name)}">${avl(b.name)}</div>${esc(b.name)} <small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px">BOT</small><span class="dot"></span></div>`).join("");paintTalk();
 }
 const esc=t=>String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function drawMsgs(){const id=srvs[cur.s].ch[cur.c].id,l=msgs[id]||[];
- $("msgs").innerHTML=l.length?l.map(m=>`<div class="m"><div class="av" style="${avs(m.u)}">${avl(m.u)}</div><div><b>${esc(m.u)}</b>${m.u=="Claude"?'<small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px;margin-right:6px">BOT</small>':""}<small>${new Date(m.ts).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</small>${m.t?`<p>${esc(m.t)}</p>`:""}${okImg(m.img)?`<img src="${m.img}" onclick="zoom(this.src)" style="max-width:min(100%,360px);max-height:300px;border-radius:6px;margin-top:4px;display:block;cursor:zoom-in">`:""}</div></div>`).join(""):`<p style="color:var(--mu)">Este é o começo de #${esc(srvs[cur.s].ch[cur.c].n)}.</p>`;
+ $("msgs").innerHTML=l.length?l.map(m=>`<div class="m"><div class="av" style="${avs(m.u)}">${avl(m.u)}</div><div><b>${esc(m.u)}</b>${isBot(m.u)?'<small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px;margin-right:6px">BOT</small>':""}<small>${new Date(m.ts).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</small>${m.t?`<p>${esc(m.t)}</p>`:""}${okImg(m.img)?`<img src="${m.img}" onclick="zoom(this.src)" style="max-width:min(100%,360px);max-height:300px;border-radius:6px;margin-top:4px;display:block;cursor:zoom-in">`:""}</div></div>`).join(""):`<p style="color:var(--mu)">Este é o começo de #${esc(srvs[cur.s].ch[cur.c].n)}.</p>`;
  if(typing==id)$("msgs").insertAdjacentHTML("beforeend",'<p style="color:var(--mu)">Claude está digitando…</p>');$("msgs").scrollTop=1e9}
-$("mi").onkeydown=e=>{if(e.key!="Enter")return;const t=$("mi").value.trim().slice(0,2000);if(!t)return;if(!rate())return;const id=srvs[cur.s].ch[cur.c].id;(msgs[id]=msgs[id]||[]).push({u:me,t,ts:Date.now()});S.set("cc_msgs",msgs);$("mi").value="";drawMsgs();const ch=srvs[cur.s].ch[cur.c];if(ch.ai||/@claude/i.test(t))askClaude(id)};
+$("mi").onkeydown=e=>{if(e.key!="Enter")return;const t=$("mi").value.trim().slice(0,2000);if(!t)return;if(!rate())return;const id=srvs[cur.s].ch[cur.c].id;(msgs[id]=msgs[id]||[]).push({u:me,t,ts:Date.now()});S.set("cc_msgs",msgs);$("mi").value="";drawMsgs();const ch=srvs[cur.s].ch[cur.c];const bt=getBots().find(b=>b.p&&new RegExp("@"+b.name.replace(/\./g,"\\.")+"(?![\\w.-])","i").test(t));if(bt)askClaude(id,bt);else if(ch.ai||/@claude/i.test(t))askClaude(id)};
 let typing=null;
+const getBots=()=>{const b=S.get("cc_bots",[]);return Array.isArray(b)?b:[]};
+const isBot=n=>n=="Claude"||getBots().some(b=>b.name==n);
+async function sha(s){return hx(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)))}
+const newKey=()=>"cnc_"+rnd(24);
+function drawBots(shown){const l=getBots().filter(b=>b.o==me);
+ $("bl").innerHTML=l.map(b=>`<div style="background:var(--bg2);border-radius:6px;padding:10px;margin-bottom:8px"><b>${esc(b.name)}</b> <small style="color:var(--mu)">chave ...${esc(b.l)}${b.p?" · IA":""}</small><br><button class="ib" data-r="${esc(b.id)}">🔄 Nova chave</button><button class="ib" data-d="${esc(b.id)}">🗑️ Excluir</button></div>`).join("")+(shown?`<div style="background:var(--bg3);padding:10px;border-radius:6px;margin-bottom:8px"><small>Copie agora, ela não será mostrada de novo:</small><input readonly value="${esc(shown)}" onclick="this.select()"></div>`:"")}
+$("bl").onclick=async e=>{const r=e.target.dataset.r,d=e.target.dataset.d,bs=getBots();
+ if(r){const b=bs.find(x=>x.id==r&&x.o==me);if(!b)return;const k=newKey();b.h=await sha(k);b.l=k.slice(-4);S.set("cc_bots",bs);drawBots(k)}
+ if(d&&confirm("Excluir este bot?")){S.set("cc_bots",bs.filter(x=>!(x.id==d&&x.o==me)));drawBots();render()}};
+$("bot").onclick=()=>{$("be").textContent="";$("bm").style.display="flex";drawBots()};
+$("bx").onclick=()=>{$("bm").style.display="none";drawBots()};
+$("bc").onclick=async()=>{const n=$("bn").value.trim(),p=$("bp").value.trim(),bs=getBots(),k0=n.toLowerCase();
+ if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{2,19}$/.test(n)||k0.replace(/[^a-z]/g,"").includes("claude"))return $("be").textContent="Nome de 3 a 20 caracteres (letras, números, . - _), sem “claude”.";
+ if(bs.some(b=>b.name.toLowerCase()==k0)||Object.prototype.hasOwnProperty.call(S.get("cc_users",{}),k0))return $("be").textContent="Esse nome já está em uso.";
+ if(bs.filter(b=>b.o==me).length>=5)return $("be").textContent="Limite de 5 bots por conta.";
+ const k=newKey();bs.push({id:rnd(6),o:me,name:n,p,h:await sha(k),l:k.slice(-4)});
+ if(!S.set("cc_bots",bs))return $("be").textContent="Armazenamento cheio.";
+ $("bn").value="";$("bp").value="";$("be").textContent="";drawBots(k);render()};
+async function viaWorker(arr,imgs){
+ const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:arr,images:imgs})});
+ if(r.status==429)throw {code:"rate_limited"};
+ if(!r.ok)throw {code:"http"};
+ const d=await r.json();return typeof d.text=="string"?d.text:"…"}
 let talking=false,actx=null;
 function paintTalk(){$("mav").classList.toggle("talk",talking);document.querySelectorAll(".tile").forEach(t=>t.classList.toggle("talk",talking));document.querySelectorAll("[data-me]").forEach(e=>e.classList.toggle("talk",talking));document.querySelectorAll("[data-ai]").forEach(e=>e.classList.toggle("talk",typing!==null))}
 function setTalk(v){if(v!==talking){talking=v;paintTalk()}}
@@ -194,20 +218,20 @@ function sendImg(f){
 $("att").onclick=()=>$("fi").click();
 $("fi").onchange=()=>{sendImg($("fi").files[0]);$("fi").value=""};
 $("mi").onpaste=e=>{const f=[...(e.clipboardData?e.clipboardData.files:[])][0];if(f&&f.type.startsWith("image/")){e.preventDefault();sendImg(f)}};
-async function askClaude(id){
+async function askClaude(id,bot){
  typing=id;paintTalk();drawMsgs();let out;
  try{
-  const sample=await claude.use("sample");
-  if(!sample)throw {code:"none"};
-  const recent=(msgs[id]||[]).slice(-12),hist=recent.map(m=>m.u=="Claude"?{role:"assistant",content:m.t}:{role:"user",content:m.u+": "+(m.t||"[enviou uma imagem]")});
-  const imgs=[],lim=await sample.limits();
-  if(lim&&lim.images)for(const m of recent.filter(m=>okImg(m.img)).slice(-3))imgs.push(dataBlob(m.img));
+  const sample=typeof claude!="undefined"?await claude.use("sample"):null;
+  if(!sample&&!API)throw {code:"none"};
+  const recent=(msgs[id]||[]).slice(-12),hist=recent.map(m=>m.u==(bot?bot.name:"Claude")?{role:"assistant",content:m.t}:{role:"user",content:m.u+": "+(m.t||"[enviou uma imagem]")});
+  const imgs=[],lim=sample?await sample.limits():{images:true};
+  if(lim&&lim.images)for(const m of recent.filter(m=>okImg(m.img)).slice(-3))imgs.push(sample?dataBlob(m.img):m.img);
   const arr=[];hist.forEach(h=>{const l=arr[arr.length-1];if(l&&l.role==h.role)l.content+="\n"+h.content;else arr.push(h)});
   while(arr.length&&arr[0].role!="user")arr.shift();
-  arr[0].content="Você é o Claude, um assistente de IA dentro do Concord, um chat estilo Discord. Responda em português, de forma curta e amigável, sem markdown pesado. Cada mensagem de usuário começa com o nome de quem escreveu. Você pode receber imagens anexadas (as mais recentes do chat, em ordem); analise-as quando perguntarem.\n\n"+arr[0].content;
-  out=(await sample(arr,imgs.length?{cache:false,images:imgs}:{cache:false})).text;
+  arr[0].content="Você é o Claude, um assistente de IA dentro do Concord, um chat estilo Discord. Responda em português, de forma curta e amigável, sem markdown pesado. Cada mensagem de usuário começa com o nome de quem escreveu. Você pode receber imagens anexadas (as mais recentes do chat, em ordem); analise-as quando perguntarem.\n\n"+(bot?"Neste momento você está atuando como o bot "+bot.name+". Personalidade e regras definidas pelo dono: "+bot.p+"\n\n":"")+arr[0].content;
+  out=sample?(await sample(arr,imgs.length?{cache:false,images:imgs}:{cache:false})).text:await viaWorker(arr,imgs);
  }catch(e){out=e&&e.code=="not_granted"?"Preciso da sua permissão para responder. Envie outra mensagem e aceite o pedido.":e&&e.code=="rate_limited"?"Muitas mensagens seguidas, tente de novo em instantes.":"Não consegui responder agora. O Claude só funciona na página publicada no claude.ai."}
- typing=null;paintTalk();(msgs[id]=msgs[id]||[]).push({u:"Claude",t:out||"…",ts:Date.now()});S.set("cc_msgs",msgs);if(srvs[cur.s].ch[cur.c].id==id)drawMsgs()}
+ typing=null;paintTalk();(msgs[id]=msgs[id]||[]).push({u:bot?bot.name:"Claude",t:out||"…",ts:Date.now()});S.set("cc_msgs",msgs);if(srvs[cur.s].ch[cur.c].id==id)drawMsgs()}
 $("addch").onclick=()=>{const n=(prompt("Nome do canal")||"").trim();if(!n)return;const v=confirm("Canal de voz? OK = voz, Cancelar = texto");srvs[cur.s].ch.push({id:"c"+Date.now(),n,t:v?"voice":"text"});S.set("cc_servers",srvs);render()};
 $("menu").onclick=()=>$("chs").classList.toggle("show");
 window.addEventListener("storage",e=>{if(!me)return;if(e.key=="cc_msgs"){msgs=S.get("cc_msgs",{});if(srvs[cur.s].ch[cur.c].t=="text")drawMsgs()}if(e.key=="cc_users"){loadPics();paintMe();render()}});
