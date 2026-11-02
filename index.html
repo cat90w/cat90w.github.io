@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Concord</title>
+<meta name="referrer" content="no-referrer">
+<script>if(location.hostname.endsWith(".github.io")){var m=document.createElement("meta");m.httpEquiv="Content-Security-Policy";m.content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none'";document.head.appendChild(m);if(top!==self)top.location=self.location}</script>
 <style>
 :root{--bg:#313338;--bg2:#2b2d31;--bg3:#1e1f22;--tx:#dbdee1;--mu:#949ba4;--ac:#5865f2;--ok:#23a55a;--er:#f23f43;--hv:#3f4147;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:dark}
@@ -93,28 +95,36 @@ const S={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}c
 set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}}};
 const COLORS=["#5865f2","#eb459e","#23a55a","#f0b232","#e67e22","#1abc9c","#9b59b6"];
 const col=n=>n=="Claude"?"#d97757":COLORS[[...n].reduce((a,c)=>a+c.charCodeAt(0),0)%COLORS.length];
-let mode="in",me=S.get("cc_session",null),srvs,msgs,cur={s:0,c:0},media={cam:null,scr:null,mic:null},inCall=false;
+let mode="in",me=(s=>s&&typeof s=="object"&&s.e>Date.now()&&typeof s.n=="string"?s.n:null)(S.get("cc_session",null)),srvs,msgs,cur={s:0,c:0},media={cam:null,scr:null,mic:null},inCall=false;
 async function hash(u,p){try{const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("concord:"+u.toLowerCase()+":"+p));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}catch(e){return btoa(u+p)}}
 function setMode(m){mode=m;$("tIn").className=m=="in"?"on":"";$("tUp").className=m=="up"?"on":"";$("c2").style.display=m=="up"?"block":"none";$("go").textContent=m=="in"?"Entrar":"Criar conta";$("err").textContent=""}
 $("tIn").onclick=()=>setMode("in");$("tUp").onclick=()=>setMode("up");
 async function submit(){
  const u=$("u").value.trim(),p=$("p").value,users=S.get("cc_users",{}),k=u.toLowerCase();
  if(mode=="up"&&[k.replace(/[^a-z0-9]/g,""),k.replace(/[^a-z]/g,""),k.replace(/[^a-z0-9@]/g,"").replace(/0/g,"o").replace(/1/g,"l").replace(/3/g,"e").replace(/4|@/g,"a").replace(/5/g,"s")].some(x=>x.includes("claude")))return $("err").textContent="Nomes com “claude” são reservados, com ou sem números.";
- if(u.length<3)return $("err").textContent="O nome precisa de pelo menos 3 caracteres.";
- if(p.length<6)return $("err").textContent="A senha precisa de pelo menos 6 caracteres.";
- const h=await hash(u,p);
+ if(mode=="up"&&!/^[A-Za-z0-9][A-Za-z0-9_.-]{2,19}$/.test(u))return $("err").textContent="Nome de 3 a 20 caracteres: letras, números, ponto, hífen ou _, começando com letra ou número.";if(u.length<3)return $("err").textContent="O nome precisa de pelo menos 3 caracteres.";
+ if(mode=="up"){const w=pwWeak(p,u);if(w)return $("err").textContent=w}else if(!p)return $("err").textContent="Digite a senha.";
+ if(!window.crypto||!crypto.subtle)return $("err").textContent="Este navegador não suporta criptografia segura.";const lk=S.get("cc_lock",{}),L=lk[k]||{n:0,t:0};if(mode=="in"&&L.t>Date.now())return $("err").textContent="Muitas tentativas. Aguarde "+Math.ceil((L.t-Date.now())/1000)+"s.";
  if(mode=="up"){
   if(p!==$("p2").value)return $("err").textContent="As senhas não coincidem.";
-  if(users[k])return $("err").textContent="Esse nome já está em uso.";
-  users[k]={name:u,h};S.set("cc_users",users);
- }else if(!users[k]||users[k].h!==h)return $("err").textContent="Usuário ou senha incorretos.";
- me=users[k].name;S.set("cc_session",me);start();
+  if(Object.prototype.hasOwnProperty.call(users,k))return $("err").textContent="Esse nome já está em uso.";
+  const salt=rnd(16);users[k]={name:u,s:salt,h:await pbk(p,salt),v:2};if(!S.set("cc_users",users))return $("err").textContent="Não foi possível salvar a conta (armazenamento cheio).";
+ }else{
+  const o=Object.prototype.hasOwnProperty.call(users,k)?users[k]:null;let ok=false;
+  if(o&&o.v==2)ok=same(o.h,await pbk(p,o.s));
+  else if(o){ok=same(o.h,await hash(u,p));if(ok){const s=rnd(16);o.s=s;o.h=await pbk(p,s);o.v=2;S.set("cc_users",users)}}
+  else await pbk(p,rnd(16));
+  if(!ok){L.n++;if(L.n>=5)L.t=Date.now()+Math.min(1800,30*2**(L.n-5))*1000;lk[k]=L;S.set("cc_lock",lk);return $("err").textContent="Usuário ou senha incorretos."}
+  delete lk[k];S.set("cc_lock",lk);
+ }
+ me=users[k].name;S.set("cc_session",{n:me,e:Date.now()+7*864e5});start();
 }
 $("go").onclick=submit;[$("u"),$("p"),$("p2")].forEach(e=>e.onkeydown=ev=>{if(ev.key=="Enter")submit()});
-$("out").onclick=()=>{leave();me=null;S.set("cc_session",null);$("app").style.display="none";$("auth").style.display="flex";$("p").value=""};
+$("out").onclick=()=>logout();
+function logout(m){leave();me=null;S.set("cc_session",null);$("app").style.display="none";$("auth").style.display="flex";$("p").value="";$("p2").value="";$("msgs").innerHTML="";$("err").textContent=m||""}
 
-function load(){srvs=S.get("cc_servers",null)||[{id:1,name:"Concord HQ",ch:[{id:"g1",n:"geral",t:"text"},{id:"g2",n:"aleatório",t:"text"},{id:"v1",n:"Sala de voz",t:"voice"}]}];msgs=S.get("cc_msgs",{});srvs.forEach(s=>{if(!s.ch.some(c=>c.ai))s.ch.splice(1,0,{id:"ai"+s.id,n:"claude",t:"text",ai:1})});S.set("cc_servers",srvs)}
-function start(){load();loadPics();$("auth").style.display="none";$("app").style.display="grid";
+function load(){srvs=S.get("cc_servers",null)||[{id:1,name:"Concord HQ",ch:[{id:"g1",n:"geral",t:"text"},{id:"g2",n:"aleatório",t:"text"},{id:"v1",n:"Sala de voz",t:"voice"}]}];msgs=S.get("cc_msgs",{});Object.keys(msgs).forEach(c=>{if(Array.isArray(msgs[c])&&msgs[c].length>300)msgs[c]=msgs[c].slice(-300)});srvs.forEach(s=>{if(!s.ch.some(c=>c.ai))s.ch.splice(1,0,{id:"ai"+s.id,n:"claude",t:"text",ai:1})});S.set("cc_servers",srvs)}
+function start(){load();loadPics();bump();$("auth").style.display="none";$("app").style.display="grid";
  $("mn").textContent=me;paintMe();cur={s:0,c:0};render()}
 function render(){
  $("srv").innerHTML="";
@@ -129,19 +139,30 @@ function render(){
  if(!v)drawMsgs();
  const us=Object.values(S.get("cc_users",{}));$("ml").innerHTML=`<div class="mm"><div class="av" style="background:#d97757">C</div>Claude <small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px">BOT</small><span class="dot"></span></div>`+us.map(u=>`<div class="mm"><div class="av" style="${avs(u.name)}">${avl(u.name)}</div>${esc(u.name)}<span class="dot"></span></div>`).join("");
 }
-const esc=t=>t.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const esc=t=>String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function drawMsgs(){const id=srvs[cur.s].ch[cur.c].id,l=msgs[id]||[];
- $("msgs").innerHTML=l.length?l.map(m=>`<div class="m"><div class="av" style="${avs(m.u)}">${avl(m.u)}</div><div><b>${esc(m.u)}</b>${m.u=="Claude"?'<small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px;margin-right:6px">BOT</small>':""}<small>${new Date(m.ts).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</small>${m.t?`<p>${esc(m.t)}</p>`:""}${m.img?`<img src="${m.img}" onclick="zoom(this.src)" style="max-width:min(100%,360px);max-height:300px;border-radius:6px;margin-top:4px;display:block;cursor:zoom-in">`:""}</div></div>`).join(""):`<p style="color:var(--mu)">Este é o começo de #${esc(srvs[cur.s].ch[cur.c].n)}.</p>`;
+ $("msgs").innerHTML=l.length?l.map(m=>`<div class="m"><div class="av" style="${avs(m.u)}">${avl(m.u)}</div><div><b>${esc(m.u)}</b>${m.u=="Claude"?'<small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px;margin-right:6px">BOT</small>':""}<small>${new Date(m.ts).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</small>${m.t?`<p>${esc(m.t)}</p>`:""}${okImg(m.img)?`<img src="${m.img}" onclick="zoom(this.src)" style="max-width:min(100%,360px);max-height:300px;border-radius:6px;margin-top:4px;display:block;cursor:zoom-in">`:""}</div></div>`).join(""):`<p style="color:var(--mu)">Este é o começo de #${esc(srvs[cur.s].ch[cur.c].n)}.</p>`;
  if(typing==id)$("msgs").insertAdjacentHTML("beforeend",'<p style="color:var(--mu)">Claude está digitando…</p>');$("msgs").scrollTop=1e9}
-$("mi").onkeydown=e=>{if(e.key!="Enter")return;const t=$("mi").value.trim();if(!t)return;const id=srvs[cur.s].ch[cur.c].id;(msgs[id]=msgs[id]||[]).push({u:me,t,ts:Date.now()});S.set("cc_msgs",msgs);$("mi").value="";drawMsgs();const ch=srvs[cur.s].ch[cur.c];if(ch.ai||/@claude/i.test(t))askClaude(id)};
+$("mi").onkeydown=e=>{if(e.key!="Enter")return;const t=$("mi").value.trim().slice(0,2000);if(!t)return;if(!rate())return;const id=srvs[cur.s].ch[cur.c].id;(msgs[id]=msgs[id]||[]).push({u:me,t,ts:Date.now()});S.set("cc_msgs",msgs);$("mi").value="";drawMsgs();const ch=srvs[cur.s].ch[cur.c];if(ch.ai||/@claude/i.test(t))askClaude(id)};
 let typing=null;
+const okImg=s=>typeof s=="string"&&s.length<3e6&&/^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/.test(s);
+function pwWeak(p,u){if(p.length<10)return "A senha precisa de pelo menos 10 caracteres.";if(!/[a-zA-Z]/.test(p)||!/\d/.test(p))return "Use letras e números na senha.";if(/^(.)\1+$/.test(p)||/(password|senha|qwerty|123456|abcdef|admin|letmein)/i.test(p))return "Essa senha é muito comum. Escolha outra.";if(p.toLowerCase().includes(u.toLowerCase()))return "A senha não pode conter o nome de usuário.";return ""}
+const hx=a=>[...new Uint8Array(a)].map(x=>x.toString(16).padStart(2,"0")).join("");
+const unhx=s=>new Uint8Array(s.match(/../g).map(h=>parseInt(h,16)));
+const rnd=n=>hx(crypto.getRandomValues(new Uint8Array(n)));
+async function pbk(p,salt){const k=await crypto.subtle.importKey("raw",new TextEncoder().encode(p),"PBKDF2",false,["deriveBits"]);return hx(await crypto.subtle.deriveBits({name:"PBKDF2",salt:unhx(salt),iterations:310000,hash:"SHA-256"},k,256))}
+function same(a,b){if(typeof a!="string"||typeof b!="string"||a.length!==b.length)return false;let r=0;for(let i=0;i<a.length;i++)r|=a.charCodeAt(i)^b.charCodeAt(i);return !r}
+let sent=[];function rate(){const n=Date.now();sent=sent.filter(x=>n-x<5000);if(sent.length>=5){const mi=$("mi"),o=mi.placeholder;mi.placeholder="Calma! Aguarde um instante…";setTimeout(()=>mi.placeholder=o,2000);return false}sent.push(n);return true}
+let idle;function bump(){clearTimeout(idle);if(me)idle=setTimeout(()=>{if(media.cam||media.scr||media.mic)return bump();logout("Sessão encerrada por inatividade.")},18e5)}
+["click","keydown","touchstart"].forEach(e=>addEventListener(e,bump,{passive:true}));
+addEventListener("pagehide",()=>{try{leave()}catch(x){}});
 let pics={};
-function loadPics(){pics={};const u=S.get("cc_users",{});for(const k in u)if(u[k].pic)pics[k]=u[k].pic}
+function loadPics(){pics={};const u=S.get("cc_users",{});for(const k in u)if(okImg(u[k].pic))pics[k]=u[k].pic}
 const avs=n=>{const p=pics[n.toLowerCase()];return p?`background:url('${p}') center/cover`:`background:${col(n)}`};
 const avl=n=>pics[n.toLowerCase()]?"":esc(n[0].toUpperCase());
 function paintMe(){$("mav").textContent=avl(me);$("mav").style.cssText=avs(me)}
 $("mav").onclick=()=>$("pf").click();
-$("pf").onchange=()=>{const f=$("pf").files[0];$("pf").value="";if(!f||!f.type.startsWith("image/"))return;
+$("pf").onchange=()=>{const f=$("pf").files[0];$("pf").value="";if(!f||!/^image\/(jpeg|png|webp|gif)$/.test(f.type)||f.size>10e6){alert("Envie uma imagem JPG, PNG, WebP ou GIF de até 10 MB.");return}
  const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const s=Math.min(im.width,im.height),c=document.createElement("canvas");c.width=c.height=160;
   const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,160,160);x.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,160,160);
   const us=S.get("cc_users",{}),k=me.toLowerCase();if(!us[k])return;us[k].pic=c.toDataURL("image/jpeg",.85);
@@ -150,7 +171,7 @@ $("pf").onchange=()=>{const f=$("pf").files[0];$("pf").value="";if(!f||!f.type.s
 function dataBlob(d){const b=atob(d.split(",")[1]),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return new Blob([a],{type:"image/jpeg"})}
 function zoom(s){const d=document.createElement("div");d.style.cssText="position:fixed;inset:0;background:#000c;display:grid;place-items:center;z-index:20;cursor:zoom-out";d.innerHTML=`<img src="${s}" style="max-width:95%;max-height:95%">`;d.onclick=()=>d.remove();document.body.appendChild(d)}
 function sendImg(f){
- if(!f||!f.type.startsWith("image/"))return;
+ if(!f||!/^image\/(jpeg|png|webp|gif)$/.test(f.type)||f.size>10e6){alert("Envie uma imagem JPG, PNG, WebP ou GIF de até 10 MB.");return}if(!rate())return;
  const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
   const k=Math.min(1,900/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);
   const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);
@@ -167,7 +188,7 @@ async function askClaude(id){
   if(!sample)throw {code:"none"};
   const recent=(msgs[id]||[]).slice(-12),hist=recent.map(m=>m.u=="Claude"?{role:"assistant",content:m.t}:{role:"user",content:m.u+": "+(m.t||"[enviou uma imagem]")});
   const imgs=[],lim=await sample.limits();
-  if(lim&&lim.images)for(const m of recent.filter(m=>m.img).slice(-3))imgs.push(dataBlob(m.img));
+  if(lim&&lim.images)for(const m of recent.filter(m=>okImg(m.img)).slice(-3))imgs.push(dataBlob(m.img));
   const arr=[];hist.forEach(h=>{const l=arr[arr.length-1];if(l&&l.role==h.role)l.content+="\n"+h.content;else arr.push(h)});
   while(arr.length&&arr[0].role!="user")arr.shift();
   arr[0].content="Você é o Claude, um assistente de IA dentro do Concord, um chat estilo Discord. Responda em português, de forma curta e amigável, sem markdown pesado. Cada mensagem de usuário começa com o nome de quem escreveu. Você pode receber imagens anexadas (as mais recentes do chat, em ordem); analise-as quando perguntarem.\n\n"+arr[0].content;
@@ -180,7 +201,7 @@ window.addEventListener("storage",e=>{if(!me)return;if(e.key=="cc_msgs"){msgs=S.
 
 /* Chamadas: câmera, tela e microfone */
 function tiles(){const g=$("grid");g.innerHTML="";
- [["cam","Câmera"],["scr","Tela"]].forEach(([k,l])=>{if(!media[k])return;const t=document.createElement("div");t.className="tile";const v=document.createElement("video");v.autoplay=true;v.muted=true;v.playsInline=true;v.srcObject=media[k];t.appendChild(v);const tg=document.createElement("div");tg.className="tag";tg.textContent=me+" · "+l;t.appendChild(tg);g.appendChild(t)});
+ [["cam","Câmera"],["scr","Tela"]].forEach(([k,l])=>{if(!media[k])return;const t=document.createElement("div");t.className="tile";const v=document.createElement("video");v.autoplay=true;v.muted=true;v.playsInline=true;v.srcObject=media[k];t.appendChild(v);const tg=document.createElement("div");tg.className="tag";tg.textContent="🔴 "+me+" · "+l;t.appendChild(tg);g.appendChild(t)});
  if(!g.children.length){const t=document.createElement("div");t.className="tile";t.innerHTML=`<div class="av" style="width:80px;height:80px;font-size:32px;${avs(me)}">${avl(me)}</div>`;g.appendChild(t)}
  $("bCam").className="cb"+(media.cam?" on":"");$("bScr").className="cb"+(media.scr?" on":"");$("bMic").className="cb"+(media.mic?" on":"")}
 async function toggle(k){
@@ -197,7 +218,7 @@ new MutationObserver(()=>{});
 const vo=$("voice");let lastV=false;
 setInterval(()=>{const v=srvs&&me&&srvs[cur.s].ch[cur.c].t=="voice";if(v&&!lastV){inCall=true;tiles()}lastV=v},300);
 
-if(me&&S.get("cc_users",{})[me.toLowerCase()])start();else $("auth").style.display="flex";
+if(me&&Object.prototype.hasOwnProperty.call(S.get("cc_users",{}),me.toLowerCase()))start();else $("auth").style.display="flex";
 </script>
 </body>
 </html>
