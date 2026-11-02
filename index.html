@@ -38,7 +38,7 @@ input{width:100%;padding:10px;border-radius:4px;border:0;background:var(--bg3);o
 .cat{font-size:12px;font-weight:700;color:var(--mu);margin:12px 6px 4px;text-transform:uppercase}
 .me{display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg3)}
 .av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;flex:none}
-.me span{flex:1;overflow:hidden;text-overflow:ellipsis}
+.me span{flex:1;overflow:hidden;text-overflow:ellipsis}#mav{cursor:pointer}
 .ib{background:none;color:var(--mu);padding:6px;border-radius:4px}.ib:hover{background:var(--hv)}
 #main{background:var(--bg)}
 #msgs{flex:1;overflow:auto;padding:16px}
@@ -75,7 +75,7 @@ input{width:100%;padding:10px;border-radius:4px;border:0;background:var(--bg3);o
 <div id="app">
 <div class="col" id="srv"></div>
 <div class="col" id="chs"><div class="hd"><span id="sn"></span><button class="ib" id="addch" title="Novo canal">＋</button></div><div class="list" id="chl"></div>
-<div class="me"><div class="av" id="mav"></div><span id="mn"></span><button class="ib" id="out" title="Sair">⎋</button></div></div>
+<div class="me"><div class="av" id="mav" title="Trocar foto de perfil"></div><input type="file" id="pf" accept="image/*" hidden><span id="mn"></span><button class="ib" id="out" title="Sair">⎋</button></div></div>
 <div class="col" id="main">
 <div class="hd"><span><button class="ib" id="menu">☰</button> <span id="cn"></span></span></div>
 <div id="msgs"></div>
@@ -114,8 +114,8 @@ $("go").onclick=submit;[$("u"),$("p"),$("p2")].forEach(e=>e.onkeydown=ev=>{if(ev
 $("out").onclick=()=>{leave();me=null;S.set("cc_session",null);$("app").style.display="none";$("auth").style.display="flex";$("p").value=""};
 
 function load(){srvs=S.get("cc_servers",null)||[{id:1,name:"Concord HQ",ch:[{id:"g1",n:"geral",t:"text"},{id:"g2",n:"aleatório",t:"text"},{id:"v1",n:"Sala de voz",t:"voice"}]}];msgs=S.get("cc_msgs",{});srvs.forEach(s=>{if(!s.ch.some(c=>c.ai))s.ch.splice(1,0,{id:"ai"+s.id,n:"claude",t:"text",ai:1})});S.set("cc_servers",srvs)}
-function start(){load();$("auth").style.display="none";$("app").style.display="grid";
- $("mn").textContent=me;$("mav").textContent=me[0].toUpperCase();$("mav").style.background=col(me);cur={s:0,c:0};render()}
+function start(){load();loadPics();$("auth").style.display="none";$("app").style.display="grid";
+ $("mn").textContent=me;paintMe();cur={s:0,c:0};render()}
 function render(){
  $("srv").innerHTML="";
  srvs.forEach((s,i)=>{const b=document.createElement("button");b.className="si"+(i==cur.s?" on":"");b.textContent=s.name.slice(0,2).toUpperCase();b.title=s.name;b.onclick=()=>{cur={s:i,c:0};leave();render()};$("srv").appendChild(b)});
@@ -127,14 +127,26 @@ function render(){
  $("msgs").style.display=v?"none":"block";$("inp").style.display=v?"none":"flex";$("voice").style.display=v?"flex":"none";
  $("chs").classList.remove("show");
  if(!v)drawMsgs();
- const us=Object.values(S.get("cc_users",{}));$("ml").innerHTML=`<div class="mm"><div class="av" style="background:#d97757">C</div>Claude <small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px">BOT</small><span class="dot"></span></div>`+us.map(u=>`<div class="mm"><div class="av" style="background:${col(u.name)}">${esc(u.name[0].toUpperCase())}</div>${esc(u.name)}<span class="dot"></span></div>`).join("");
+ const us=Object.values(S.get("cc_users",{}));$("ml").innerHTML=`<div class="mm"><div class="av" style="background:#d97757">C</div>Claude <small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px">BOT</small><span class="dot"></span></div>`+us.map(u=>`<div class="mm"><div class="av" style="${avs(u.name)}">${avl(u.name)}</div>${esc(u.name)}<span class="dot"></span></div>`).join("");
 }
 const esc=t=>t.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function drawMsgs(){const id=srvs[cur.s].ch[cur.c].id,l=msgs[id]||[];
- $("msgs").innerHTML=l.length?l.map(m=>`<div class="m"><div class="av" style="background:${col(m.u)}">${esc(m.u[0].toUpperCase())}</div><div><b>${esc(m.u)}</b>${m.u=="Claude"?'<small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px;margin-right:6px">BOT</small>':""}<small>${new Date(m.ts).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</small>${m.t?`<p>${esc(m.t)}</p>`:""}${m.img?`<img src="${m.img}" onclick="zoom(this.src)" style="max-width:min(100%,360px);max-height:300px;border-radius:6px;margin-top:4px;display:block;cursor:zoom-in">`:""}</div></div>`).join(""):`<p style="color:var(--mu)">Este é o começo de #${esc(srvs[cur.s].ch[cur.c].n)}.</p>`;
+ $("msgs").innerHTML=l.length?l.map(m=>`<div class="m"><div class="av" style="${avs(m.u)}">${avl(m.u)}</div><div><b>${esc(m.u)}</b>${m.u=="Claude"?'<small style="background:var(--ac);color:#fff;border-radius:3px;padding:0 4px;margin-right:6px">BOT</small>':""}<small>${new Date(m.ts).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</small>${m.t?`<p>${esc(m.t)}</p>`:""}${m.img?`<img src="${m.img}" onclick="zoom(this.src)" style="max-width:min(100%,360px);max-height:300px;border-radius:6px;margin-top:4px;display:block;cursor:zoom-in">`:""}</div></div>`).join(""):`<p style="color:var(--mu)">Este é o começo de #${esc(srvs[cur.s].ch[cur.c].n)}.</p>`;
  if(typing==id)$("msgs").insertAdjacentHTML("beforeend",'<p style="color:var(--mu)">Claude está digitando…</p>');$("msgs").scrollTop=1e9}
 $("mi").onkeydown=e=>{if(e.key!="Enter")return;const t=$("mi").value.trim();if(!t)return;const id=srvs[cur.s].ch[cur.c].id;(msgs[id]=msgs[id]||[]).push({u:me,t,ts:Date.now()});S.set("cc_msgs",msgs);$("mi").value="";drawMsgs();const ch=srvs[cur.s].ch[cur.c];if(ch.ai||/@claude/i.test(t))askClaude(id)};
 let typing=null;
+let pics={};
+function loadPics(){pics={};const u=S.get("cc_users",{});for(const k in u)if(u[k].pic)pics[k]=u[k].pic}
+const avs=n=>{const p=pics[n.toLowerCase()];return p?`background:url('${p}') center/cover`:`background:${col(n)}`};
+const avl=n=>pics[n.toLowerCase()]?"":esc(n[0].toUpperCase());
+function paintMe(){$("mav").textContent=avl(me);$("mav").style.cssText=avs(me)}
+$("mav").onclick=()=>$("pf").click();
+$("pf").onchange=()=>{const f=$("pf").files[0];$("pf").value="";if(!f||!f.type.startsWith("image/"))return;
+ const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const s=Math.min(im.width,im.height),c=document.createElement("canvas");c.width=c.height=160;
+  const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,160,160);x.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,160,160);
+  const us=S.get("cc_users",{}),k=me.toLowerCase();if(!us[k])return;us[k].pic=c.toDataURL("image/jpeg",.85);
+  if(!S.set("cc_users",us)){alert("O armazenamento do navegador está cheio.");return}
+  loadPics();paintMe();render()};im.onerror=()=>alert("Não foi possível abrir essa imagem.");im.src=r.result};r.readAsDataURL(f)};
 function dataBlob(d){const b=atob(d.split(",")[1]),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return new Blob([a],{type:"image/jpeg"})}
 function zoom(s){const d=document.createElement("div");d.style.cssText="position:fixed;inset:0;background:#000c;display:grid;place-items:center;z-index:20;cursor:zoom-out";d.innerHTML=`<img src="${s}" style="max-width:95%;max-height:95%">`;d.onclick=()=>d.remove();document.body.appendChild(d)}
 function sendImg(f){
@@ -164,12 +176,12 @@ async function askClaude(id){
  typing=null;(msgs[id]=msgs[id]||[]).push({u:"Claude",t:out||"…",ts:Date.now()});S.set("cc_msgs",msgs);if(srvs[cur.s].ch[cur.c].id==id)drawMsgs()}
 $("addch").onclick=()=>{const n=(prompt("Nome do canal")||"").trim();if(!n)return;const v=confirm("Canal de voz? OK = voz, Cancelar = texto");srvs[cur.s].ch.push({id:"c"+Date.now(),n,t:v?"voice":"text"});S.set("cc_servers",srvs);render()};
 $("menu").onclick=()=>$("chs").classList.toggle("show");
-window.addEventListener("storage",e=>{if(!me)return;if(e.key=="cc_msgs"){msgs=S.get("cc_msgs",{});if(srvs[cur.s].ch[cur.c].t=="text")drawMsgs()}if(e.key=="cc_users")render()});
+window.addEventListener("storage",e=>{if(!me)return;if(e.key=="cc_msgs"){msgs=S.get("cc_msgs",{});if(srvs[cur.s].ch[cur.c].t=="text")drawMsgs()}if(e.key=="cc_users"){loadPics();paintMe();render()}});
 
 /* Chamadas: câmera, tela e microfone */
 function tiles(){const g=$("grid");g.innerHTML="";
  [["cam","Câmera"],["scr","Tela"]].forEach(([k,l])=>{if(!media[k])return;const t=document.createElement("div");t.className="tile";const v=document.createElement("video");v.autoplay=true;v.muted=true;v.playsInline=true;v.srcObject=media[k];t.appendChild(v);const tg=document.createElement("div");tg.className="tag";tg.textContent=me+" · "+l;t.appendChild(tg);g.appendChild(t)});
- if(!g.children.length){const t=document.createElement("div");t.className="tile";t.innerHTML=`<div class="av" style="width:80px;height:80px;font-size:32px;background:${col(me)}">${esc(me[0].toUpperCase())}</div>`;g.appendChild(t)}
+ if(!g.children.length){const t=document.createElement("div");t.className="tile";t.innerHTML=`<div class="av" style="width:80px;height:80px;font-size:32px;${avs(me)}">${avl(me)}</div>`;g.appendChild(t)}
  $("bCam").className="cb"+(media.cam?" on":"");$("bScr").className="cb"+(media.scr?" on":"");$("bMic").className="cb"+(media.mic?" on":"")}
 async function toggle(k){
  if(media[k]){media[k].getTracks().forEach(t=>t.stop());media[k]=null;return tiles()}
